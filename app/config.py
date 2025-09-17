@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     cors_origin:str="*"
     chunk_size: int = 1024 * 1024  
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
   
     @property
     def postgres_database_url(self) -> str:
@@ -23,3 +25,4 @@ def get_settings() -> Settings:
     return Settings()
 
 settings = get_settings()
+

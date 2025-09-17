@@ -1,14 +1,16 @@
-from jose import jwt, JWTError  # type: ignore
+from jose import jwt, JWTError
 from fastapi import Depends, status, HTTPException
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession # Utiliser la session asynchrone
+from sqlalchemy.future import select # Utiliser select pour les requêtes asynchrones
 from typing import Annotated
-from datetime import datetime, timedelta,timezone
+
+from datetime import datetime, timedelta
 
 from app.config import settings
-from app.postgres_connect import get_db
+from app.postgres_connect import get_db_session
 from app.models.user import User
-from app.schemas.token import TokenData, TokenExpires, UserToken
+from app.schemas.token import TokenData
 
 oauth2_schema = OAuth2PasswordBearer(tokenUrl="auth/login")
 
@@ -31,10 +33,12 @@ def verify_token(token: str):
         return payload
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    
 
-def get_current_user(token: Annotated[str, Depends(oauth2_schema)],
-                     db: Annotated[Session, Depends(get_db)]) -> User:
+# Rendre la fonction de dépendance asynchrone
+async def get_current_user(
+    token: Annotated[str, Depends(oauth2_schema)],
+    db: Annotated[AsyncSession, Depends(get_db_session)] # Utiliser la dépendance asynchrone
+) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -45,10 +49,14 @@ def get_current_user(token: Annotated[str, Depends(oauth2_schema)],
 
     try:
         token_data = TokenData(**payload)
-        user = db.query(User).filter_by(id=token_data.user_id).first()
+        
+        # Exécuter la requête de manière asynchrone
+        result = await db.execute(select(User).where(User.id == token_data.user_id))
+        user = result.scalars().first()
+
         if user is None:
             raise credentials_exception
         return user
     except Exception:
         raise credentials_exception
-
+    
